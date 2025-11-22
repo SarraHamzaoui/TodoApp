@@ -5,42 +5,50 @@ import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 
 import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 
+
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class TodoApiTest {
 
-    private static String TOKEN;
+    @LocalServerPort
+    private int port;
+
+    private String token;  // <-- private et non static
 
     @BeforeAll
-    static void setup() {
+    void setup() {
         RestAssured.baseURI = "http://localhost";
-        RestAssured.port = 8089;
+        RestAssured.port = port;
 
-        // Création d'un utilisateur de test et récupération du token JWT
         Map<String, String> registerBody = Map.of(
                 "email", "testuser@example.com",
                 "password", "1234"
         );
 
-        // On s'assure que l'utilisateur est enregistré (ignore erreur si déjà existant)
+        // Register
         given()
                 .contentType(ContentType.JSON)
                 .body(registerBody)
                 .when()
                 .post("/auth/register");
 
-        // Login pour obtenir le token JWT
+        // Login
         Response response = given()
                 .contentType(ContentType.JSON)
                 .body(registerBody)
                 .when()
                 .post("/auth/login");
 
-        TOKEN = response.jsonPath().getString("token");
+        token = response.jsonPath().getString("token");
     }
 
     @Test
@@ -52,7 +60,7 @@ public class TodoApiTest {
 
         given()
                 .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer " + TOKEN)
+                .header("Authorization", "Bearer " + token)
                 .body(todoBody)
                 .when()
                 .post("/api/todo/create")
