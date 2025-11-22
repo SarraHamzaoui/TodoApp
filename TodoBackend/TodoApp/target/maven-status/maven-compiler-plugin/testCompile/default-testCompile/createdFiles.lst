@@ -1,0 +1,7 @@
+com\java\springboot\todoapp\TodoAppApplicationTests.class
+com\java\springboot\todoapp\controller\TodoListIntegrationTest.class
+com\java\springboot\todoapp\controller\TodoControllerTest.class
+com\java\springboot\todoapp\service\UserServiceTest.class
+com\java\springboot\todoapp\api\TodoApiTest.class
+com\java\springboot\todoapp\service\TodoServiceTest.class
+com\java\springboot\todoapp\controller\AuthControllerTest.class
