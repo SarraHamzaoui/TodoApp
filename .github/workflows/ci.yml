@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-test
 
-    # ✅ Le bloc permissions est CORRECTEMENT placé ici, au niveau du job
+    # ✅ CRITIQUE : Le job a besoin de "write" pour uploader le rapport SARIF
     permissions:
       contents: read
       actions: write
@@ -177,18 +177,31 @@ jobs:
           # Stocker le token dans les variables d'environnement de GitHub pour l'étape ZAP
           echo "TOKEN=$TOKEN" >> $GITHUB_ENV
 
-      # 4️⃣ Exécuter ZAP en injectant le token d'autorisation
-      - name: 🛡️ Run OWASP ZAP Baseline Scan (Authenticated)
+      # 4️⃣ Exécuter ZAP et générer le SARIF
+      - name: 🛡️ Run OWASP ZAP Baseline Scan (Authenticated, SARIF)
+        id: zap_scan
         uses: zaproxy/action-baseline@v0.7.0
         with:
           target: 'http://localhost:8089'
           docker_name: 'ghcr.io/zaproxy/zaproxy:stable'
-          # CRITIQUE: Désactiver l'Automation Framework (--autooff) et encapsuler toutes les options ZAP
+          # Force la sortie SARIF pour GitHub Code Scanning
+          issue_title: 'ZAP Security Scan Results'
+          # Désactiver l'Automation Framework et encapsuler toutes les options ZAP (Replacer)
           cmd_options: >-
             -a --autooff 
             -z "-config replacer.full_list_of_rules.rule_0.description=AuthHeader -config replacer.full_list_of_rules.rule_0.enabled=true -config replacer.full_list_of_rules.rule_0.matchtype=REQ_HEADER -config replacer.full_list_of_rules.rule_0.matchregex=false -config replacer.full_list_of_rules.rule_0.replacement=Authorization: Bearer ${{ env.TOKEN }} -config replacer.full_list_of_rules.rule_0.urlregex=.* -config replacer.full_list_of_rules.rule_0.initiators=2,4,6,8,11,13,14,15,16,17"
 
-      - name: 📝 Upload ZAP Report
+      # 5️⃣ Uploader le rapport SARIF à GitHub Code Scanning
+      - name: ⬆️ Upload SARIF report to GitHub
+        # Cette action est l'action officielle de GitHub pour uploader les résultats de sécurité
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          # Le rapport SARIF est généré par l'action ZAP sous ce nom de fichier
+          sarif_file: zap-sarif.sarif
+          # Le chemin est `security_scan.outputs.sarif_file`, mais l'action ZAP place par défaut dans le répertoire de travail
+          # L'action ZAP écrit le fichier à la racine de l'espace de travail.
+
+      - name: 📝 Upload ZAP HTML Report (Artifact)
         uses: actions/upload-artifact@v4
         with:
           name: zap-security-report
