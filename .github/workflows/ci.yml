@@ -89,7 +89,7 @@ jobs:
         working-directory: TodoBackend/TodoApp
         run: |
           nohup mvn spring-boot:run &
-          sleep 45   
+          sleep 40 
 
       - name: Run OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.7.0
