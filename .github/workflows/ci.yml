@@ -77,6 +77,26 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-test
 
+    # ✅ CRITIQUE : Le job a besoin de "write" pour uploader le rapport SARIF
+    permissions:
+      contents: read
+      actions: write
+      security-events: write
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: tododb
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=2s
+          --health-retries=20
+
     steps:
       - name: ⚙️ Checkout repository
         uses: actions/checkout@v4
@@ -87,17 +107,20 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # 1️⃣ Démarrer Spring Boot via le JAR
       - name: 🚀 Start Spring Boot (background) via JAR
         working-directory: TodoBackend/TodoApp
         run: |
+          # Trouver le nom du JAR compilé
           JAR_FILE=$(ls target/*.jar | head -n 1)
+          
           if [ -z "$JAR_FILE" ]; then
-            echo "Error: JAR file not found. Did build succeed?"
+            echo "Error: JAR file not found in target/. Aborting scan."
             exit 1
           fi
+
+          echo "Starting application from $JAR_FILE on port 8089..."
           
-          echo "Starting Spring Boot from $JAR_FILE on port 8089..."
+          # Démarrer le JAR en forçant la configuration DB et le port
           nohup java -jar $JAR_FILE \
             --server.port=8089 \
             --spring.datasource.url="jdbc:mysql://localhost:3306/tododb" \
@@ -105,56 +128,76 @@ jobs:
             --spring.datasource.password=root > springboot.log 2>&1 &
           
           echo "Waiting 45 seconds for server startup..."
-          sleep 45
+          sleep 45 
+          
           echo "--- Spring Boot Logs ---"
           tail -n 30 springboot.log
           echo "------------------------"
 
-      # 2️⃣ Vérification simple que l'application répond
-      - name: ⏳ Wait for App to be responsive
+      # 🔍 NOUVELLE VÉRIFICATION DE SANTÉ PLUS ROBUSTE
+      - name: ⏳ Wait for App to be Responsive
         run: |
+          echo "Waiting for http://localhost:8089/auth/login to be responsive..."
           for i in {1..10}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8089/auth/login || echo "000")
-            if [[ "$STATUS" =~ ^4|5 ]]; then
-              echo "App responded with HTTP code $STATUS"
+            # curl retourne 0 si la connexion a réussi, peu importe le code HTTP (401, 403, 200...)
+            # -f (fail on errors) est retiré pour accepter les 4xx/5xx qui indiquent que le port est ouvert
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8089/auth/login | grep -q '40'; then
+              echo "App responded. Starting in 3s..."
+              sleep 3
               break
             fi
-            echo "Waiting for port 8089..."
+            echo "Still waiting for port 8089..."
             sleep 5
           done
 
-      # 3️⃣ Créer un utilisateur scan (ignore si existe déjà)
+      # 2️⃣ Créer l'utilisateur (on utilise les mêmes infos que pour la connexion)
       - name: 👤 Register Scan User
         run: |
+          # Tentative d'enregistrement de l'utilisateur de scan. On ignore l'échec s'il existe déjà.
           curl -s -X POST http://localhost:8089/auth/register \
             -H "Content-Type: application/json" \
             -d '{"email":"scanuser@zap.com","password":"zap-password"}' || true
 
-      # 4️⃣ Récupérer le JWT
+      # 3️⃣ Récupérer le JWT token (avec les identifiants synchronisés)
       - name: 🔑 Get JWT token
         id: get-token
         run: |
           RESPONSE=$(curl -s -X POST http://localhost:8089/auth/login \
             -H "Content-Type: application/json" \
             -d '{"email":"scanuser@zap.com","password":"zap-password"}')
+          
+          # Utilisation de jq pour extraire le token. Si l'extraction échoue, le token sera vide.
           TOKEN=$(echo "$RESPONSE" | jq -r '.token')
+          
           if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "ERROR: Failed to get JWT token. Response:"
+            echo "ERROR: Failed to get JWT token. Response from server:"
             echo "$RESPONSE"
             exit 1
           fi
+          # Stocker le token dans les variables d'environnement de GitHub pour l'étape ZAP
           echo "TOKEN=$TOKEN" >> $GITHUB_ENV
 
-      # 5️⃣ Lancer ZAP avec le token
-      - name: 🛡️ Run OWASP ZAP Baseline Scan
+      # 4️⃣ Exécuter ZAP et générer le SARIF (SANS upload interne)
+      - name: 🛡️ Run OWASP ZAP Baseline Scan (Authenticated, Generate SARIF)
         uses: zaproxy/action-baseline@v0.7.0
         with:
           target: 'http://localhost:8089'
           docker_name: 'ghcr.io/zaproxy/zaproxy:stable'
-          cmd_options: "-a -H 'Authorization: Bearer ${{ env.TOKEN }}'"
+          # CRITIQUE : Force la génération d'un fichier SARIF local et désactive l'upload interne
+          sarif_output: 'zap-sarif-report.sarif'
+          # Désactiver l'Automation Framework et encapsuler toutes les options ZAP (Replacer)
+          cmd_options: >-
+            -a --autooff 
+            -z "-config replacer.full_list_of_rules.rule_0.description=AuthHeader -config replacer.full_list_of_rules.rule_0.enabled=true -config replacer.full_list_of_rules.rule_0.matchtype=REQ_HEADER -config replacer.full_list_of_rules.rule_0.matchregex=false -config replacer.full_list_of_rules.rule_0.replacement=Authorization: Bearer ${{ env.TOKEN }} -config replacer.full_list_of_rules.rule_0.urlregex=.* -config replacer.full_list_of_rules.rule_0.initiators=2,4,6,8,11,13,14,15,16,17"
 
-      # 6️⃣ Upload du rapport HTML
-      - name: 📝 Upload ZAP HTML Report
+      # 5️⃣ Uploader le rapport SARIF à GitHub Code Scanning (Méthode officielle)
+      - name: ⬆️ Upload SARIF report to GitHub
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'zap-sarif-report.sarif'
+          token: ${{ secrets.GITHUB_TOKEN }} # Utilise le jeton avec les permissions 'security-events: write'
+
+      - name: 📝 Upload ZAP HTML Report (Artifact)
         uses: actions/upload-artifact@v4
         with:
           name: zap-security-report
