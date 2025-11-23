@@ -183,10 +183,9 @@ jobs:
         with:
           target: 'http://localhost:8089'
           docker_name: 'ghcr.io/zaproxy/zaproxy:stable'
-          # CRITIQUE: Configuration du composant Replacer de ZAP via -z pour injecter
-          # l'en-tête d'autorisation dans toutes les requêtes (initiators=2,4,...)
+          # CRITIQUE: Désactiver l'Automation Framework (--autooff) et encapsuler toutes les options ZAP
           cmd_options: >-
-            -a
+            -a --autooff 
             -z "-config replacer.full_list_of_rules.rule_0.description=AuthHeader -config replacer.full_list_of_rules.rule_0.enabled=true -config replacer.full_list_of_rules.rule_0.matchtype=REQ_HEADER -config replacer.full_list_of_rules.rule_0.matchregex=false -config replacer.full_list_of_rules.rule_0.replacement=Authorization: Bearer ${{ env.TOKEN }} -config replacer.full_list_of_rules.rule_0.urlregex=.* -config replacer.full_list_of_rules.rule_0.initiators=2,4,6,8,11,13,14,15,16,17"
 
       - name: 📝 Upload ZAP Report
