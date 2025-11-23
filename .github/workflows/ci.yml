@@ -182,15 +182,7 @@ jobs:
             -a --autooff 
             -z "-config replacer.full_list_of_rules.rule_0.description=AuthHeader -config replacer.full_list_of_rules.rule_0.enabled=true -config replacer.full_list_of_rules.rule_0.matchtype=REQ_HEADER -config replacer.full_list_of_rules.rule_0.matchregex=false -config replacer.full_list_of_rules.rule_0.replacement=Authorization: Bearer ${{ env.TOKEN }} -config replacer.full_list_of_rules.rule_0.urlregex=.* -config replacer.full_list_of_rules.rule_0.initiators=2,4,6,8,11,13,14,15,16,17"
 
-      # 5️⃣ Uploader le rapport SARIF à GitHub Code Scanning (Méthode officielle)
-      # La condition ci-dessous empêche l'erreur de permission sur les PR provenant de forks externes.
-      - name: ⬆️ Upload SARIF report to GitHub
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.repository == github.event.pull_request.head.repo.full_name)
-        uses: github/codeql-action/upload-sarif@v3
-        continue-on-error: true # ✅ Correction finale : continue même si GitHub bloque la permission
-        with:
-          sarif_file: 'zap-sarif-report.sarif'
-          token: ${{ secrets.GITHUB_TOKEN }}
+      
 
       - name: 📝 Upload ZAP HTML Report (Artifact)
         uses: actions/upload-artifact@v4
