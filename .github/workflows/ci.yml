@@ -170,19 +170,14 @@ jobs:
           fi
           echo "TOKEN=$TOKEN" >> $GITHUB_ENV
 
-      # 4️⃣ Exécuter ZAP et générer le SARIF
-      - name: 🛡️ Run OWASP ZAP Baseline Scan (Authenticated, Generate SARIF)
+      - name: 🛡️ Run OWASP ZAP Baseline Scan (HTML only)
         uses: zaproxy/action-baseline@v0.7.0
         with:
           target: 'http://localhost:8089'
           docker_name: 'ghcr.io/zaproxy/zaproxy:stable'
-          # Le fichier 'zap-sarif-report.sarif' sera généré par défaut.
-          # Désactiver l'Automation Framework et encapsuler toutes les options ZAP (Replacer)
-          cmd_options: >-
-            -a --autooff 
-            -z "-config replacer.full_list_of_rules.rule_0.description=AuthHeader -config replacer.full_list_of_rules.rule_0.enabled=true -config replacer.full_list_of_rules.rule_0.matchtype=REQ_HEADER -config replacer.full_list_of_rules.rule_0.matchregex=false -config replacer.full_list_of_rules.rule_0.replacement=Authorization: Bearer ${{ env.TOKEN }} -config replacer.full_list_of_rules.rule_0.urlregex=.* -config replacer.full_list_of_rules.rule_0.initiators=2,4,6,8,11,13,14,15,16,17"
+          cmd_options: '-a -r zap-report.html'
 
-      
+
 
       - name: 📝 Upload ZAP HTML Report (Artifact)
         uses: actions/upload-artifact@v4
