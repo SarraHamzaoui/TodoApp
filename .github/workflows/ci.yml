@@ -60,3 +60,13 @@ jobs:
           path: |
             TodoBackend/TodoApp/target/site/surefire-report.html
             TodoBackend/TodoApp/target/surefire-reports/**
+
+      - name: Run tests + generate coverage
+        run: mvn -B clean test
+        working-directory: TodoBackend/TodoApp
+
+      - name: Upload JaCoCo Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: TodoBackend/TodoApp/target/site/jacoco/
