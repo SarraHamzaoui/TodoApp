@@ -42,7 +42,6 @@ jobs:
             mysql -h 127.0.0.1 -u root -proot -e "SELECT 1" && break || sleep 2
           done
 
-
       - name: Clean project
         run: mvn clean
         working-directory: TodoBackend/TodoApp
@@ -74,7 +73,7 @@ jobs:
     needs: build-and-test
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -86,7 +85,9 @@ jobs:
       - name: Start Spring Boot (background)
         working-directory: TodoBackend/TodoApp
         run: |
-          nohup mvn spring-boot:run & 
+          nohup mvn spring-boot:run \
+            -Dspring-boot.run.main-class=com.java.springboot.todoapp.TodoAppApplication \
+            -Dserver.port=8089 &
           sleep 55
 
       - name: Run OWASP ZAP Baseline Scan
