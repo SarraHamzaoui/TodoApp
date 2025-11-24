@@ -9,93 +9,73 @@ on:
 
 jobs:
 
-  # ---------------------------------------------------------------------------
-  # 🧪 BUILD + TESTS + COVERAGE
-  # ---------------------------------------------------------------------------
   build-and-test:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
-      actions: write
-      security-events: write
-
-    services:
-      mysql:
-        image: mysql:8
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: tododb
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping --silent"
-          --health-interval=5s
-          --health-timeout=2s
-          --health-retries=20
-
     steps:
-      - name: ⚙️ Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: 🛠️ Set up JDK 17
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
-          cache: maven
 
-      - name: ⏳ Wait for MySQL to be ready
-        run: |
-          for i in {1..30}; do
-            mysql -h 127.0.0.1 -u root -proot -e "SELECT 1" && break || sleep 2
-          done
-
-      - name: 🏗️ Run Maven Build & Tests
-        run: mvn clean install -B
+      - name: Build project
+        run: mvn clean install -DskipTests=true
         working-directory: TodoBackend/TodoApp
 
-      - name: 📊 Generate Surefire HTML report
+      - name: Run Tests
+        run: mvn test
+        working-directory: TodoBackend/TodoApp
+
+      - name: Generate Surefire HTML report
         run: mvn surefire-report:report
         working-directory: TodoBackend/TodoApp
 
-      - name: 📝 Upload test reports
+      - name: Upload test reports
         uses: actions/upload-artifact@v4
         with:
           name: test-report
-          path: |
-            TodoBackend/TodoApp/target/site/surefire-report.html
-            TodoBackend/TodoApp/target/surefire-reports/**
+          path: TodoBackend/TodoApp/target/site/surefire-report.html
 
-      - name: 📝 Upload JaCoCo Coverage Report
+      - name: Upload JaCoCo Coverage
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-report
           path: TodoBackend/TodoApp/target/site/jacoco/
 
-  # ---------------------------------------------------------------------------
-  # 🔒 SECURITY SCAN — ZAP
-  # ---------------------------------------------------------------------------
 
   zap_scan:
     runs-on: ubuntu-latest
-    needs: build-and-test  # ⬅️ Se lance après les tests
+    needs: build-and-test
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # 🚀 1) Lancer ton backend Spring
+      - name: Start Spring Boot app
+        run: |
+          mvn spring-boot:run &
+          sleep 15
+        working-directory: TodoBackend/TodoApp
+
+      # 🔒 2) ZAP Baseline Scan
       - name: Run ZAP Baseline Scan
         id: zap
         uses: zaproxy/action-baseline@v0.11.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          target: 'http://localhost:8089'
+          target: "http://localhost:8089"   # ⬅️ MET LE PORT DE TON BACKEND !
           cmd_options: "-r zap_report.html"
 
-      - name: List ZAP output
-        run: ls -R .
-
+      # 📁 3) Upload du rapport
       - name: Upload ZAP report
         uses: actions/upload-artifact@v4
         with:
